@@ -108,7 +108,13 @@ const STATUS_OPTIONS = [
   { id:"posted",   label:"Posted",   color:"#6ED9A0" },
 ];
 
-// ─── UTILS ────────────────────────────────────────────────────────────────────
+const RETENTION_RATINGS = [
+  { id:"poor",      label:"Poor",      color:"#E87E7E", desc:"Low watch time, dropped off early" },
+  { id:"standard",  label:"Standard",  color:"#A89880", desc:"Average retention for the format"  },
+  { id:"great",     label:"Great",     color:"#6DC8E8", desc:"Held attention well throughout"    },
+  { id:"standout",  label:"Standout",  color:"#D4A853", desc:"Significantly above average"       },
+  { id:"viral",     label:"Viral",     color:"#6ED9A0", desc:"Outperformed everything"           },
+];
 const uid = () => Math.random().toString(36).slice(2, 9);
 const getPillar = id => PILLARS.find(p => p.id === id) || PILLARS[0];
 const getFormat = id => FORMATS.find(f => f.id === id) || FORMATS[0];
@@ -135,6 +141,13 @@ const blankIdea = () => ({
   videoLink:        "",
   inspirationLink:  "",
   series:           "",
+  reviewDate:       "",
+  starRating:       0,
+  retentionRating:  "",
+  metrics:          {},
+  whatWorked:       "",
+  whatDidnt:        "",
+  doDifferently:    "",
   createdAt:        Date.now(),
 });
 
@@ -205,9 +218,10 @@ function IdeaEditor({ idea, onChange, onClose, onDelete }) {
   };
 
   const TABS = [
-    { id:"overview",   label:"Overview"   },
-    { id:"framework",  label:"Framework"  },
-    { id:"notes",      label:"Full Notes" },
+    { id:"overview",  label:"Overview"  },
+    { id:"framework", label:"Framework" },
+    { id:"notes",     label:"Full Notes"},
+    { id:"review",    label: idea.status === "posted" ? "⭐ Review" : "Review" },
   ];
 
   return (
@@ -471,6 +485,91 @@ function IdeaEditor({ idea, onChange, onClose, onDelete }) {
               </Field>
             </div>
           )}
+
+          {/* REVIEW TAB */}
+          {tab === "review" && (
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+
+              {idea.status !== "posted" && (
+                <div style={{ padding: "12px 14px", background: G.gold+"0C", border: `1px solid ${G.gold}25`, borderRadius: 9, marginBottom: 20, fontSize: 12, color: G.textMid, lineHeight: 1.7 }}>
+                  <span style={{ color: G.gold, fontWeight: 600 }}>Review unlocks once posted. </span>
+                  Mark this idea as Posted to log your performance review.
+                </div>
+              )}
+
+              <Field label="Review Date — 1 week after posting">
+                <input type="date" value={idea.reviewDate || (idea.postDate ? (() => { const d = new Date(idea.postDate); d.setDate(d.getDate()+7); return d.toISOString().split('T')[0]; })() : "")}
+                  onChange={e => upd("reviewDate", e.target.value)}
+                  style={{ padding: "9px 12px", background: G.cardLow, border: `1px solid ${G.border}`, borderRadius: 8, color: G.text, fontSize: 13, colorScheme: "dark" }} />
+              </Field>
+
+              <Field label="Overall Rating">
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[1,2,3,4,5].map(n => (
+                    <button key={n} onClick={() => upd("starRating", idea.starRating === n ? 0 : n)} style={{
+                      fontSize: 28, background: "transparent", border: "none", padding: "2px",
+                      color: n <= (idea.starRating || 0) ? G.gold : G.border,
+                      transition: "all 0.15s ease", lineHeight: 1,
+                    }}>★</button>
+                  ))}
+                  {idea.starRating > 0 && (
+                    <span style={{ alignSelf: "center", fontSize: 11, color: G.textDim, marginLeft: 4 }}>
+                      {["","One to forget","Room to grow","Solid","Really good","Best work yet"][idea.starRating]}
+                    </span>
+                  )}
+                </div>
+              </Field>
+
+              <Field label="Performance by Metric">
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { key:"views",    label:"Views"         },
+                    { key:"likes",    label:"Likes"         },
+                    { key:"comments", label:"Comments"      },
+                    { key:"shares",   label:"Shares"        },
+                    { key:"saves",    label:"Saves"         },
+                    { key:"follows",  label:"Follows Gained"},
+                  ].map(metric => {
+                    const val = (idea.metrics || {})[metric.key] || "";
+                    return (
+                      <div key={metric.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, color: G.textMid, fontWeight: 600, width: 110, flexShrink: 0 }}>{metric.label}</span>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {RETENTION_RATINGS.map(r => (
+                            <Pill key={r.id} label={r.label} color={r.color} small
+                              active={val === r.id}
+                              onClick={() => upd("metrics", { ...(idea.metrics||{}), [metric.key]: val === r.id ? "" : r.id })} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Field label="What worked">
+                <Textarea value={idea.whatWorked} onChange={e => upd("whatWorked", e.target.value)}
+                  placeholder="Hook landed well? Specific line that resonated? Format choice? Timing?" rows={4} />
+              </Field>
+
+              <Field label="What didn't work">
+                <Textarea value={idea.whatDidnt} onChange={e => upd("whatDidnt", e.target.value)}
+                  placeholder="Weak bridge? Hook didn't land? Pacing issues? Wrong format for the idea?" rows={4} />
+              </Field>
+
+              <Field label="What I'd do differently">
+                <Textarea value={idea.doDifferently} onChange={e => upd("doDifferently", e.target.value)}
+                  placeholder="Specific changes — not vague improvements. What exactly would you change?" rows={4} />
+              </Field>
+
+              {(idea.whatWorked || idea.whatDidnt || idea.doDifferently) && (
+                <div style={{ padding: "12px 14px", background: G.green+"08", border: `1px solid ${G.green}20`, borderRadius: 9, fontSize: 11, color: G.textDim, lineHeight: 1.75 }}>
+                  <span style={{ color: G.green, fontWeight: 600 }}>The pattern: </span>
+                  The point of this isn't the individual review — it's reading across 10 reviews and seeing what keeps appearing in "what worked." That's your format fingerprint.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -514,6 +613,15 @@ function IdeaCard({ idea, onClick }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
           <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: status.color+"20", color: status.color, fontWeight: 600 }}>{status.label}</span>
           {hasDate && <span style={{ fontSize: 10, color: G.textDim }}>{fmt_date(idea.postDate)}</span>}
+          {idea.starRating > 0 && (
+            <span style={{ fontSize: 10, color: G.gold }}>{"★".repeat(idea.starRating)}</span>
+          )}
+          {idea.metrics && Object.values(idea.metrics).some(v => v) && (() => {
+            const order = ["viral","standout","great","standard","poor"];
+            const best = order.find(o => Object.values(idea.metrics).includes(o));
+            const r = RETENTION_RATINGS.find(x => x.id === best);
+            return r ? <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 4, background: r.color+"20", color: r.color, fontWeight: 600 }}>{r.label}</span> : null;
+          })()}
           {Array.isArray(idea.intent) && idea.intent.length > 0 && (
             <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
               {idea.intent.map(id => {
