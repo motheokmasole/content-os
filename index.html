@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content OS — Motheo</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+const G = {
+  bg: "#13110F", surface: "#1C1916",
+  border: "#2E2A26", borderLight: "#3A3530",
+  text: "#F5F0E8", textMid: "#A89880", textDim: "#6B5F52",
+  gold: "#D4A853", green: "#6ED9A0", blue: "#6DC8E8",
+  orange: "#E8906A", purple: "#B87EE8",
+  card: "#201D1A", cardHigh: "#282420", cardLow: "#181512",
+};
+
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: ${G.bg}; font-family: 'Inter', sans-serif; color: ${G.text}; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: #3A3530; border-radius: 4px; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes slideIn { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes expandIn { from{opacity:0;max-height:0} to{opacity:1;max-height:2000px} }
+  input, textarea, button, select { font-family: 'Inter', sans-serif; }
+  input:focus, textarea:focus { outline: none; border-color: ${G.gold}60 !important; box-shadow: 0 0 0 3px ${G.gold}12 !important; }
+  button { cursor: pointer; }
+  .nav-btn:hover { background: ${G.gold}10 !important; color: ${G.gold} !important; }
+  .nav-btn.active { background: ${G.gold}14 !important; color: ${G.gold} !important; border-left: 3px solid ${G.gold} !important; }
+  .idea-card:hover { border-color: ${G.border} !important; background: ${G.cardHigh} !important; }
+  .pill:hover { opacity: 0.8; }
+  .icon-btn:hover { background: ${G.cardHigh} !important; }
+`;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const PILLARS = [
+  { id:"productivity", label:"Productivity", color:"#D4A853", emoji:"⚡", lens:"For the person who knows what to do but can't make themselves do it." },
+  { id:"university",   label:"University",   color:"#6DC8E8", emoji:"🎓", lens:"For the person doing everything right but still feeling behind." },
+  { id:"mindset",      label:"Mindset",      color:"#E8906A", emoji:"🧠", lens:"For the person who's moving but feels empty, or has stopped and doesn't know why." },
+];
+
+const FORMATS = [
+  { id:"th_punchy",  label:"Punchy TH",       vtype:"TH",  funnel:"tofu", maxLen:"30s" },
+  { id:"listing",    label:"Listing TH",       vtype:"TH",  funnel:"tofu", maxLen:"90s" },
+  { id:"contrarian", label:"Contrarian TH",    vtype:"TH",  funnel:"tofu", maxLen:"75s" },
+  { id:"stepbystep", label:"Step-by-Step TH",  vtype:"TH",  funnel:"mofu", maxLen:"90s" },
+  { id:"reflection", label:"Reflection TH",    vtype:"TH",  funnel:"mofu", maxLen:"90s" },
+  { id:"comparison", label:"Comparison TH",    vtype:"TH",  funnel:"tofu", maxLen:"90s" },
+  { id:"still_text", label:"Still + Text",     vtype:"STL", funnel:"tofu", maxLen:"30s" },
+  { id:"still_vo",   label:"Still + VO",       vtype:"STL", funnel:"mofu", maxLen:"60s" },
+  { id:"statement",  label:"Statement Clip",   vtype:"STL", funnel:"tofu", maxLen:"30s" },
+  { id:"sdt",        label:"Show Don't Tell",  vtype:"SDT", funnel:"tofu", maxLen:"45s" },
+  { id:"textcard",   label:"Text Card",        vtype:"TE",  funnel:"tofu", maxLen:"—"   },
+];
+
+const VTYPES = {
+  TH:  { label:"Talking Head",    color:"#D4A853" },
+  STL: { label:"Still",           color:"#6DC8E8" },
+  SDT: { label:"Show Don't Tell", color:"#6ED9A0" },
+  TE:  { label:"Text / Edit",     color:"#A89880" },
+};
+
+const FUNNEL = {
+  tofu: { label:"ToFu", color:"#D4A853" },
+  mofu: { label:"MoFu", color:"#E8906A" },
+};
+
+const HOOK_TYPES = [
+  { id:"bold",      label:"Bold Statement",    desc:"Say the take directly. Full stop." },
+  { id:"stat",      label:"Statistic",         desc:"A real number before you say anything." },
+  { id:"reflect",   label:"Reflect It Back",   desc:"Name the feeling they haven't named yet." },
+  { id:"curiosity", label:"Curiosity Gap",     desc:"Open a loop. Don't close it until the end." },
+  { id:"contra",    label:"Contrarian Opener", desc:"Say something that seems wrong. Make them lean in." },
+  { id:"story",     label:"Story Drop",        desc:"Start mid-scene. No context." },
+  { id:"question",  label:"Direct Question",   desc:"Ask them something they've been avoiding." },
+  { id:"pattern",   label:"Pattern Interrupt", desc:"Break their autopilot before they realise." },
+];
+
+const INTENT = [
+  { id:"teach",     label:"Teach",     color:"#6DC8E8", desc:"Transferring knowledge or a framework. They leave knowing something they didn't before." },
+  { id:"share",     label:"Share",     color:"#E8906A", desc:"A window into your life or thinking. Connection over information." },
+  { id:"reinforce", label:"Reinforce", color:"#D4A853", desc:"A different angle on a belief you've already planted. Deepening, not repeating." },
+  { id:"question",  label:"Question",  color:"#B87EE8", desc:"Challenging an assumption. Making them uncomfortable with the one they already have." },
+  { id:"inspire",   label:"Inspire",   color:"#6ED9A0", desc:"Not how — why they could. Forward-facing. Makes them believe it's possible." },
+  { id:"validate",  label:"Validate",  color:"#E87E7E", desc:"Naming a feeling they have but haven't articulated. They feel seen before you say anything else." },
+];
+
+const STATUS_OPTIONS = [
+  { id:"draft",    label:"Draft",    color:"#6B5F52" },
+  { id:"ready",    label:"Ready",    color:"#D4A853" },
+  { id:"assigned", label:"Assigned", color:"#B87EE8" },
+  { id:"filmed",   label:"Filmed",   color:"#6DC8E8" },
+  { id:"edited",   label:"Edited",   color:"#E8906A" },
+  { id:"posted",   label:"Posted",   color:"#6ED9A0" },
+];
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2, 9);
+const getPillar = id => PILLARS.find(p => p.id === id) || PILLARS[0];
+const getFormat = id => FORMATS.find(f => f.id === id) || FORMATS[0];
+const getStatus = id => STATUS_OPTIONS.find(s => s.id === id) || STATUS_OPTIONS[0];
+const fmt_date  = d => { if (!d) return ""; const [y,m,day] = d.split("-"); return `${day}/${m}/${y}`; };
+
+// ─── BLANK IDEA ───────────────────────────────────────────────────────────────
+const blankIdea = () => ({
+  id:               uid(),
+  title:            "",
+  pillar:           "productivity",
+  format:           "th_punchy",
+  funnel:           "tofu",
+  intent:           [],
+  status:           "draft",
+  postDate:         "",
+  hookType:         "",
+  hookLine:         "",
+  openingEmotion:   "",
+  closingConviction:"",
+  outline:          "",
+  notes:            "",
+  tags:             [],
+  videoLink:        "",
+  inspirationLink:  "",
+  series:           "",
+  createdAt:        Date.now(),
+});
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+const STORE_KEY = "content-os-v2";
+const load  = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch { return []; } };
+const save  = ideas => { try { localStorage.setItem(STORE_KEY, JSON.stringify(ideas)); } catch {} };
+
+// ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
+const Pill = ({ label, color, onClick, active, small }) => (
+  <button onClick={onClick} className="pill" style={{
+    padding: small ? "2px 8px" : "3px 11px",
+    borderRadius: 20, border: `1px solid ${active ? color+"60" : G.border}`,
+    background: active ? color+"18" : "transparent",
+    color: active ? color : G.textDim,
+    fontSize: small ? 10 : 11, fontWeight: active ? 600 : 400,
+    transition: "all 0.15s ease", whiteSpace: "nowrap",
+  }}>{label}</button>
+);
+
+const Badge = ({ label, color }) => (
+  <span style={{
+    padding: "2px 8px", borderRadius: 5,
+    background: color, color: "#0D0B09",
+    fontSize: 10, fontWeight: 800, letterSpacing: "0.3px", whiteSpace: "nowrap",
+  }}>{label}</span>
+);
+
+const Field = ({ label, children, style }) => (
+  <div style={{ marginBottom: 16, ...style }}>
+    <div style={{ fontSize: 10, color: G.textDim, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+    {children}
+  </div>
+);
+
+const Textarea = ({ value, onChange, placeholder, rows = 4 }) => (
+  <textarea value={value} onChange={onChange} placeholder={placeholder} rows={rows} style={{
+    width: "100%", padding: "10px 12px",
+    background: G.cardLow, border: `1px solid ${G.border}`,
+    borderRadius: 8, color: G.text, fontSize: 13, lineHeight: 1.65,
+    resize: "vertical", minHeight: rows * 24,
+  }} />
+);
+
+const Input = ({ value, onChange, placeholder }) => (
+  <input value={value} onChange={onChange} placeholder={placeholder} style={{
+    width: "100%", padding: "9px 12px",
+    background: G.cardLow, border: `1px solid ${G.border}`,
+    borderRadius: 8, color: G.text, fontSize: 13,
+  }} />
+);
+
+// ─── IDEA EDITOR (right panel / modal) ────────────────────────────────────────
+function IdeaEditor({ idea, onChange, onClose, onDelete }) {
+  const [tab, setTab]     = useState("overview");
+  const [tagInput, setTagInput] = useState("");
+  const pillar  = getPillar(idea.pillar);
+  const format  = getFormat(idea.format);
+  const vt      = VTYPES[format.vtype];
+  const status  = getStatus(idea.status);
+
+  const upd = (key, val) => onChange({ ...idea, [key]: val });
+
+  const addTag = () => {
+    const t = tagInput.trim().toLowerCase().replace(/\s+/g, "-");
+    if (t && !idea.tags.includes(t)) { upd("tags", [...idea.tags, t]); }
+    setTagInput("");
+  };
+
+  const TABS = [
+    { id:"overview",   label:"Overview"   },
+    { id:"framework",  label:"Framework"  },
+    { id:"notes",      label:"Full Notes" },
+  ];
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+      background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)",
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 560, height: "100vh", overflowY: "auto",
+        background: G.surface, borderLeft: `1px solid ${G.border}`,
+        display: "flex", flexDirection: "column",
+        animation: "slideIn 0.2s ease",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${G.border}`, position: "sticky", top: 0, background: G.surface, zIndex: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <input
+              value={idea.title}
+              onChange={e => upd("title", e.target.value)}
+              placeholder="Idea title..."
+              style={{
+                flex: 1, background: "transparent", border: "none",
+                color: G.text, fontSize: 18, fontWeight: 700,
+                fontFamily: "'Fraunces', serif", marginRight: 12,
+              }}
+            />
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={onDelete} className="icon-btn" style={{ padding: "6px 10px", background: "transparent", border: `1px solid ${G.border}`, borderRadius: 7, color: G.textDim, fontSize: 12 }}>Delete</button>
+              <button onClick={onClose} className="icon-btn" style={{ padding: "6px 10px", background: "transparent", border: `1px solid ${G.border}`, borderRadius: 7, color: G.textDim, fontSize: 18, lineHeight: 1 }}>×</button>
+            </div>
+          </div>
+          {/* Status + vtype row */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <Badge label={format.vtype} color={vt.color} />
+            <span style={{ fontSize: 12, color: pillar.color, fontWeight: 600 }}>{pillar.emoji} {pillar.label}</span>
+            <span style={{ fontSize: 12, color: G.textMid }}>{format.label}</span>
+            {format.maxLen !== "—" && <span style={{ fontSize: 10, color: G.textDim, padding: "1px 6px", background: G.card, borderRadius: 4, border: `1px solid ${G.border}` }}>≤{format.maxLen}</span>}
+            <span style={{ marginLeft: "auto", fontSize: 11, padding: "2px 9px", borderRadius: 6, background: status.color+"22", color: status.color, fontWeight: 600 }}>{status.label}</span>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", borderBottom: `1px solid ${G.border}` }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              flex: 1, padding: "10px 4px", border: "none",
+              borderBottom: `2px solid ${tab === t.id ? pillar.color : "transparent"}`,
+              background: "transparent", color: tab === t.id ? pillar.color : G.textMid,
+              fontSize: 12, fontWeight: tab === t.id ? 600 : 400, transition: "all 0.15s ease",
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "20px", flex: 1 }}>
+
+          {/* OVERVIEW TAB */}
+          {tab === "overview" && (
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+
+              <Field label="Status">
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {STATUS_OPTIONS.map(s => (
+                    <Pill key={s.id} label={s.label} color={s.color} active={idea.status === s.id} onClick={() => upd("status", s.id)} />
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Post Date">
+                <input type="date" value={idea.postDate} onChange={e => upd("postDate", e.target.value)} style={{
+                  padding: "9px 12px", background: G.cardLow, border: `1px solid ${G.border}`,
+                  borderRadius: 8, color: G.text, fontSize: 13, colorScheme: "dark",
+                }} />
+              </Field>
+
+              <Field label="Pillar">
+                <div style={{ display: "flex", gap: 5 }}>
+                  {PILLARS.map(p => (
+                    <Pill key={p.id} label={`${p.emoji} ${p.label}`} color={p.color} active={idea.pillar === p.id} onClick={() => upd("pillar", p.id)} />
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: pillar.color, fontStyle: "italic" }}>{pillar.lens}</div>
+              </Field>
+
+              <Field label="Format">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {Object.entries(VTYPES).map(([vtKey, vtMeta]) => (
+                    <div key={vtKey}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, padding: "1px 7px", borderRadius: 4, background: vtMeta.color, color: "#0D0B09", fontWeight: 800 }}>{vtKey}</span>
+                        <span style={{ fontSize: 10, color: G.textDim }}>{vtMeta.label}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", paddingLeft: 4 }}>
+                        {FORMATS.filter(f => f.vtype === vtKey).map(f => (
+                          <Pill key={f.id} label={`${f.label}${f.maxLen !== "—" ? ` ≤${f.maxLen}` : ""}`} color={vtMeta.color}
+                            active={idea.format === f.id}
+                            onClick={() => upd("format", f.id)} small />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Funnel">
+                <div style={{ display: "flex", gap: 5 }}>
+                  {Object.entries(FUNNEL).map(([k, v]) => (
+                    <Pill key={k} label={v.label} color={v.color} active={idea.funnel === k} onClick={() => upd("funnel", k)} />
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Intent — pick all that apply">
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {INTENT.map(i => {
+                    const intents = Array.isArray(idea.intent) ? idea.intent : [];
+                    const active = intents.includes(i.id);
+                    return (
+                      <Pill key={i.id} label={i.label} color={i.color} active={active}
+                        onClick={() => {
+                          const cur = Array.isArray(idea.intent) ? idea.intent : [];
+                          upd("intent", active ? cur.filter(x => x !== i.id) : [...cur, i.id]);
+                        }} />
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Field label="Tags">
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                  {idea.tags.map(t => (
+                    <span key={t} className="pill" onClick={() => upd("tags", idea.tags.filter(x => x !== t))} style={{
+                      padding: "2px 9px", borderRadius: 20, background: G.card,
+                      border: `1px solid ${G.border}`, color: G.textMid,
+                      fontSize: 11, cursor: "pointer",
+                    }}>#{t} ×</span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                    placeholder="Add tag (press Enter)..."
+                    style={{ flex: 1, padding: "8px 12px", background: G.cardLow, border: `1px solid ${G.border}`, borderRadius: 8, color: G.text, fontSize: 12 }} />
+                  <button onClick={addTag} style={{ padding: "8px 14px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, color: G.textMid, fontSize: 12 }}>Add</button>
+                </div>
+              </Field>
+
+              <Field label="Video Link">
+                <Input value={idea.videoLink} onChange={e => upd("videoLink", e.target.value)} placeholder="Paste Drive / Dropbox / IG link when filmed..." />
+                {idea.videoLink && (
+                  <a href={idea.videoLink} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 11, color: G.blue }}>↗ Open link</a>
+                )}
+              </Field>
+
+              <Field label="Inspiration Link">
+                <Input value={idea.inspirationLink} onChange={e => upd("inspirationLink", e.target.value)} placeholder="Paste a reel, video or post that inspired this idea..." />
+                {idea.inspirationLink && (() => {
+                  const url = idea.inspirationLink;
+                  const isYT = /youtube\.com|youtu\.be/.test(url);
+                  const isIG = /instagram\.com/.test(url);
+                  let embedUrl = null;
+                  if (isYT) {
+                    const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                    if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
+                  }
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      {embedUrl ? (
+                        <iframe
+                          src={embedUrl}
+                          style={{ width: "100%", aspectRatio: "16/9", borderRadius: 8, border: `1px solid ${G.border}` }}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          title="Inspiration"
+                        />
+                      ) : (
+                        <div style={{ padding: "10px 12px", background: G.cardLow, border: `1px solid ${G.border}`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 11, color: G.textMid, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: 10 }}>
+                            {isIG ? "📸 Instagram" : "🔗 Link"} — {url.replace(/https?:\/\/(www\.)?/, "").slice(0, 45)}{url.length > 55 ? "…" : ""}
+                          </span>
+                          <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: G.blue, whiteSpace: "nowrap", flexShrink: 0 }}>↗ Open</a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </Field>
+
+              <Field label="Series — optional">
+                <Input value={idea.series} onChange={e => upd("series", e.target.value)} placeholder="e.g. becoming · placement year · best self..." />
+                {idea.series && (
+                  <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", background: G.purple+"18", border: `1px solid ${G.purple}35`, borderRadius: 20 }}>
+                    <span style={{ fontSize: 10, color: G.purple, fontWeight: 600 }}>⬡ {idea.series}</span>
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
+
+          {/* FRAMEWORK TAB */}
+          {tab === "framework" && (
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+              <div style={{ padding: "10px 12px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, marginBottom: 20, fontSize: 11, color: G.textMid, lineHeight: 1.7 }}>
+                <span style={{ color: G.gold, fontWeight: 700 }}>Hook → Bridge → Body → Conviction → CTA</span><br/>
+                Hook (80% of effectiveness) · Bridge opens the loop · Body = one idea · Conviction = what they carry away · CTA = one thing only
+              </div>
+
+              <Field label="Hook Type">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {HOOK_TYPES.map(h => (
+                    <button key={h.id} onClick={() => upd("hookType", idea.hookType === h.id ? "" : h.id)} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+                      background: idea.hookType === h.id ? G.gold+"12" : G.card,
+                      border: `1px solid ${idea.hookType === h.id ? G.gold+"50" : G.border}`,
+                      borderRadius: 8, textAlign: "left", transition: "all 0.15s ease",
+                    }}>
+                      <div style={{ width: 14, height: 14, borderRadius: "50%", border: `2px solid ${idea.hookType === h.id ? G.gold : G.borderLight}`, background: idea.hookType === h.id ? G.gold : "transparent", flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 12, color: idea.hookType === h.id ? G.gold : G.text, fontWeight: 600 }}>{h.label}</div>
+                        <div style={{ fontSize: 11, color: G.textDim }}>{h.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Hook Line — what they see / hear first">
+                <Textarea value={idea.hookLine} onChange={e => upd("hookLine", e.target.value)}
+                  placeholder="Write the actual opening line or on-screen text..." rows={3} />
+              </Field>
+
+              <Field label="Opening Emotion — what do they feel in second 1?">
+                <Textarea value={idea.openingEmotion} onChange={e => upd("openingEmotion", e.target.value)}
+                  placeholder="e.g. Relief — they finally feel seen. Recognition — 'that's exactly me.'" rows={2} />
+              </Field>
+
+              <Field label="Closing Conviction — what do they carry away?">
+                <Textarea value={idea.closingConviction} onChange={e => upd("closingConviction", e.target.value)}
+                  placeholder="e.g. 'I'm not broken. I just need a different approach.' They feel equipped, not guilty." rows={2} />
+              </Field>
+
+              <div style={{ padding: "10px 12px", background: G.orange+"0C", border: `1px solid ${G.orange}20`, borderRadius: 8, fontSize: 11, color: G.textMid, lineHeight: 1.7, marginTop: 4 }}>
+                <span style={{ color: G.orange, fontWeight: 600 }}>The test: </span>
+                If you can't name both emotions before you film, you don't know what the video is really about yet.
+              </div>
+            </div>
+          )}
+
+          {/* FULL NOTES TAB */}
+          {tab === "notes" && (
+            <div style={{ animation: "fadeUp 0.2s ease" }}>
+              <Field label="Outline / Script">
+                <Textarea value={idea.outline} onChange={e => upd("outline", e.target.value)}
+                  placeholder={`Develop the idea fully here. No restrictions on length.\n\nYou could write:\n— A beat-by-beat outline\n— The full script\n— Bullet points for each section\n— Whatever helps you when you pick this up to film`}
+                  rows={16} />
+              </Field>
+              <Field label="Extra Notes">
+                <Textarea value={idea.notes} onChange={e => upd("notes", e.target.value)}
+                  placeholder="Anything else — references, links, things to remember, related ideas..." rows={5} />
+              </Field>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── IDEA CARD (bank list item) ───────────────────────────────────────────────
+function IdeaCard({ idea, onClick }) {
+  const pillar = getPillar(idea.pillar);
+  const format = getFormat(idea.format);
+  const vt     = VTYPES[format.vtype];
+  const status = getStatus(idea.status);
+  const hasDate = !!idea.postDate;
+
+  return (
+    <div className="idea-card" onClick={onClick} style={{
+      padding: "14px 16px", borderRadius: 10,
+      background: G.card, border: `1px solid ${G.border}`,
+      borderLeft: `3px solid ${pillar.color}`,
+      cursor: "pointer", transition: "all 0.15s ease",
+      marginBottom: 8,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Title */}
+          <div style={{ fontSize: 14, fontWeight: 600, color: idea.title ? G.text : G.textDim, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {idea.title || "Untitled idea"}
+          </div>
+          {/* Meta row */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <Badge label={format.vtype} color={vt.color} />
+            <span style={{ fontSize: 11, color: pillar.color, fontWeight: 600 }}>{pillar.emoji} {pillar.label}</span>
+            <span style={{ fontSize: 11, color: G.textDim }}>{format.label}</span>
+            {idea.series && <span style={{ fontSize: 10, color: G.purple, padding: "1px 7px", background: G.purple+"18", border: `1px solid ${G.purple}30`, borderRadius: 20 }}>⬡ {idea.series}</span>}
+            {idea.tags.slice(0, 2).map(t => (
+              <span key={t} style={{ fontSize: 10, color: G.textDim, padding: "1px 6px", background: G.cardHigh, borderRadius: 4 }}>#{t}</span>
+            ))}
+          </div>
+        </div>
+        {/* Right col */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: status.color+"20", color: status.color, fontWeight: 600 }}>{status.label}</span>
+          {hasDate && <span style={{ fontSize: 10, color: G.textDim }}>{fmt_date(idea.postDate)}</span>}
+          {Array.isArray(idea.intent) && idea.intent.length > 0 && (
+            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {idea.intent.map(id => {
+                const i = INTENT.find(x => x.id === id);
+                return i ? <span key={id} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 4, background: i.color+"20", color: i.color, fontWeight: 600 }}>{i.label}</span> : null;
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Hook line preview */}
+      {idea.hookLine && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${G.border}`, fontSize: 11, color: G.textMid, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          "{idea.hookLine}"
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── IDEA BANK SECTION ────────────────────────────────────────────────────────
+function IdeaBankSection({ ideas, setIdeas }) {
+  const [editing, setEditing]   = useState(null); // idea id
+  const [search, setSearch]     = useState("");
+  const [fPillar, setFPillar]   = useState("all");
+  const [fVtype, setFVtype]     = useState("all");
+  const [fStatus, setFStatus]   = useState("all");
+  const [fFunnel, setFFunnel]   = useState("all");
+  const [sort, setSort]         = useState("date"); // date | status | pillar
+
+  const createIdea = () => {
+    const idea = blankIdea();
+    setIdeas(prev => [idea, ...prev]);
+    setEditing(idea.id);
+  };
+
+  const updateIdea = useCallback((updated) => {
+    setIdeas(prev => prev.map(i => i.id === updated.id ? updated : i));
+  }, [setIdeas]);
+
+  const deleteIdea = (id) => {
+    setIdeas(prev => prev.filter(i => i.id !== id));
+    setEditing(null);
+  };
+
+  // Filter + sort
+  const filtered = ideas
+    .filter(i => {
+      if (fPillar !== "all" && i.pillar !== fPillar) return false;
+      if (fVtype  !== "all" && getFormat(i.format).vtype !== fVtype) return false;
+      if (fStatus !== "all" && i.status !== fStatus) return false;
+      if (fFunnel !== "all" && i.funnel !== fFunnel) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return i.title.toLowerCase().includes(q) || i.hookLine.toLowerCase().includes(q) || i.tags.some(t => t.includes(q)) || i.notes.toLowerCase().includes(q) || i.outline.toLowerCase().includes(q) || (i.series||"").toLowerCase().includes(q);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sort === "status") return STATUS_OPTIONS.findIndex(s => s.id === a.status) - STATUS_OPTIONS.findIndex(s => s.id === b.status);
+      if (sort === "pillar") return a.pillar.localeCompare(b.pillar);
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+  const editingIdea = ideas.find(i => i.id === editing);
+
+  // Stats
+  const statuses = { draft: 0, ready: 0, assigned: 0, filmed: 0, edited: 0, posted: 0 };
+  ideas.forEach(i => { if (statuses[i.status] !== undefined) statuses[i.status]++; });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", animation: "fadeUp 0.25s ease" }}>
+
+      {/* Stats bar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        {STATUS_OPTIONS.map(s => (
+          <div key={s.id} style={{ padding: "8px 14px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontFamily: "'Fraunces',serif", fontSize: 22, color: s.color, fontWeight: 700, lineHeight: 1 }}>{statuses[s.id]}</span>
+            <span style={{ fontSize: 10, color: G.textMid, fontWeight: 500 }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search ideas, hooks, tags..."
+          style={{ flex: "1 1 180px", padding: "8px 12px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, color: G.text, fontSize: 12 }} />
+        <button onClick={createIdea} style={{
+          padding: "8px 18px", background: G.gold, color: "#0D0B09",
+          border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700,
+          whiteSpace: "nowrap",
+        }}>+ New Idea</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Pillar */}
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 10, color: G.textDim, fontWeight: 600, letterSpacing: "0.5px" }}>PILLAR</span>
+          <Pill label="All" color={G.textMid} active={fPillar==="all"} onClick={() => setFPillar("all")} small />
+          {PILLARS.map(p => <Pill key={p.id} label={p.emoji+" "+p.label} color={p.color} active={fPillar===p.id} onClick={() => setFPillar(p.id)} small />)}
+        </div>
+        {/* Vtype */}
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 10, color: G.textDim, fontWeight: 600, letterSpacing: "0.5px" }}>TYPE</span>
+          <Pill label="All" color={G.textMid} active={fVtype==="all"} onClick={() => setFVtype("all")} small />
+          {Object.entries(VTYPES).map(([k,v]) => <Pill key={k} label={k} color={v.color} active={fVtype===k} onClick={() => setFVtype(k)} small />)}
+        </div>
+        {/* Status */}
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 10, color: G.textDim, fontWeight: 600, letterSpacing: "0.5px" }}>STATUS</span>
+          <Pill label="All" color={G.textMid} active={fStatus==="all"} onClick={() => setFStatus("all")} small />
+          {STATUS_OPTIONS.map(s => <Pill key={s.id} label={s.label} color={s.color} active={fStatus===s.id} onClick={() => setFStatus(s.id)} small />)}
+        </div>
+        {/* Sort */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 10, color: G.textDim, fontWeight: 600 }}>SORT</span>
+          {[["date","Newest"],["status","Status"],["pillar","Pillar"]].map(([k,l]) => (
+            <Pill key={k} label={l} color={G.textMid} active={sort===k} onClick={() => setSort(k)} small />
+          ))}
+        </div>
+      </div>
+
+      {/* Idea list */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: G.textDim }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
+            <div style={{ fontSize: 14, marginBottom: 6, color: G.textMid }}>No ideas yet</div>
+            <div style={{ fontSize: 12 }}>Hit "New Idea" and start building your bank.</div>
+          </div>
+        ) : (
+          filtered.map(idea => (
+            <IdeaCard key={idea.id} idea={idea} onClick={() => setEditing(idea.id)} />
+          ))
+        )}
+      </div>
+
+      {/* Editor panel */}
+      {editingIdea && (
+        <IdeaEditor
+          idea={editingIdea}
+          onChange={updateIdea}
+          onClose={() => setEditing(null)}
+          onDelete={() => deleteIdea(editingIdea.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── CALENDAR SECTION ─────────────────────────────────────────────────────────
+function CalendarSection({ ideas, setIdeas }) {
+  const today    = new Date();
+  const [year, setYear]   = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const [editing, setEditing] = useState(null);
+
+  const updateIdea = useCallback((updated) => {
+    setIdeas(prev => prev.map(i => i.id === updated.id ? updated : i));
+  }, [setIdeas]);
+
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const dayNames   = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  // Build calendar grid
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month + 1, 0);
+  const startDow = (firstDay.getDay() + 6) % 7; // 0=Mon
+  const totalDays = lastDay.getDate();
+
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= totalDays; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const dateKey = d => `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const ideasForDay = d => ideas.filter(i => i.postDate === dateKey(d));
+
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+  const editingIdea = ideas.find(i => i.id === editing);
+
+  // Unassigned ready ideas
+  const readyUnassigned = ideas.filter(i => i.status === "ready" && !i.postDate);
+
+  return (
+    <div style={{ animation: "fadeUp 0.25s ease" }}>
+      {/* Month nav */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <button onClick={() => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); }}
+          style={{ padding: "8px 14px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, color: G.textMid, fontSize: 16 }}>‹</button>
+        <span style={{ fontFamily: "'Fraunces',serif", fontSize: 22, fontWeight: 700 }}>{monthNames[month]} {year}</span>
+        <button onClick={() => { if (month === 11) { setMonth(0); setYear(y => y+1); } else setMonth(m => m+1); }}
+          style={{ padding: "8px 14px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 8, color: G.textMid, fontSize: 16 }}>›</button>
+      </div>
+
+      {/* Ready to assign */}
+      {readyUnassigned.length > 0 && (
+        <div style={{ marginBottom: 16, padding: "12px 14px", background: G.gold+"0C", border: `1px solid ${G.gold}25`, borderRadius: 10 }}>
+          <div style={{ fontSize: 11, color: G.gold, fontWeight: 700, marginBottom: 8 }}>READY TO ASSIGN — {readyUnassigned.length} idea{readyUnassigned.length > 1 ? "s" : ""}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {readyUnassigned.map(i => {
+              const p = getPillar(i.pillar);
+              return (
+                <button key={i.id} onClick={() => setEditing(i.id)} style={{
+                  padding: "4px 10px", background: p.color+"18", border: `1px solid ${p.color}40`,
+                  borderRadius: 6, color: p.color, fontSize: 11, fontWeight: 600,
+                }}>{i.title || "Untitled"}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Day headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
+        {dayNames.map(d => (
+          <div key={d} style={{ textAlign: "center", fontSize: 10, color: G.textDim, fontWeight: 600, padding: "4px 0", letterSpacing: "0.5px" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+        {cells.map((d, i) => {
+          if (!d) return <div key={`e${i}`} />;
+          const key     = dateKey(d);
+          const isToday = key === todayKey;
+          const dayIdeas = ideasForDay(d);
+          return (
+            <div key={key} style={{
+              minHeight: 72, padding: "6px 7px",
+              background: isToday ? G.gold+"14" : G.card,
+              border: `1px solid ${isToday ? G.gold+"50" : G.border}`,
+              borderRadius: 8, position: "relative",
+            }}>
+              <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? G.gold : G.textMid, marginBottom: 4 }}>{d}</div>
+              {dayIdeas.map(idea => {
+                const p  = getPillar(idea.pillar);
+                const vt = VTYPES[getFormat(idea.format).vtype];
+                return (
+                  <div key={idea.id} onClick={() => setEditing(idea.id)} style={{
+                    marginBottom: 3, padding: "3px 6px", borderRadius: 5,
+                    background: p.color+"22", borderLeft: `2px solid ${p.color}`,
+                    cursor: "pointer", fontSize: 10, fontWeight: 600, color: p.color,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    <span style={{ fontSize: 8, background: vt.color, color: "#0D0B09", borderRadius: 3, padding: "0 4px", marginRight: 4, fontWeight: 800 }}>{getFormat(idea.format).vtype}</span>
+                    {idea.title || "Untitled"}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {PILLARS.map(p => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: G.textMid }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
+            {p.emoji} {p.label}
+          </div>
+        ))}
+      </div>
+
+      {/* Editor */}
+      {editingIdea && (
+        <IdeaEditor
+          idea={editingIdea}
+          onChange={updateIdea}
+          onClose={() => setEditing(null)}
+          onDelete={() => { setIdeas(prev => prev.filter(i => i.id !== editingIdea.id)); setEditing(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── HOOK BANK DATA ───────────────────────────────────────────────────────────
+const VERBAL_HOOKS = [
+  { id:"vh1",  cat:"Curiosity",  template:"Nobody talks about [X] but it changed everything for me.",                         example:"Nobody talks about the retrospective timetable but it changed everything for me." },
+  { id:"vh2",  cat:"Curiosity",  template:"The real reason [audience] struggle with [X] isn't what you think.",               example:"The real reason engineering students struggle with revision isn't what you think." },
+  { id:"vh3",  cat:"Curiosity",  template:"I spent [time] doing [X] and here's what actually happened.",                      example:"I spent 6 months on placement and here's what actually happened to my grades." },
+  { id:"vh4",  cat:"Curiosity",  template:"What they don't tell you about [X].",                                              example:"What they don't tell you about placement year." },
+  { id:"vh5",  cat:"Contrast",   template:"Stop [common thing]. Do [uncommon thing] instead.",                                example:"Stop making revision schedules. Do this instead." },
+  { id:"vh6",  cat:"Contrast",   template:"Most [audience] do [X]. The ones who succeed do [Y].",                            example:"Most students plan Sunday. The ones who execute plan Thursday night." },
+  { id:"vh7",  cat:"Contrast",   template:"[X] used to destroy me. Now it's my biggest advantage.",                          example:"Struggling in first year used to destroy me. Now it's my biggest advantage." },
+  { id:"vh8",  cat:"Direct",     template:"Here are [number] [things] that actually work for [audience].",                   example:"Here are 5 study habits that actually work for engineering students." },
+  { id:"vh9",  cat:"Direct",     template:"If you're a [audience] and not doing [X], you're leaving [result] on the table.", example:"If you're a student and not doing this, you're leaving marks on the table." },
+  { id:"vh10", cat:"Direct",     template:"I used to [struggle]. Then I did [X].",                                            example:"I used to average a 2:2. Then I changed one thing about how I planned my week." },
+  { id:"vh11", cat:"Reflection", template:"[Bold observation]. Let me explain.",                                              example:"Love and hate live on the same side of failure. Let me explain." },
+  { id:"vh12", cat:"Reflection", template:"The moment I realised [insight] was the moment everything changed.",               example:"The moment I realised I was studying for approval was the moment everything changed." },
+  { id:"vh13", cat:"Reflection", template:"I don't think [widely held belief] anymore. Here's why.",                         example:"I don't think consistency is the goal anymore. Here's why." },
+];
+
+const AUDIO_HOOKS = [
+  { id:"ah1",  name:"Riser",          emoji:"📈", desc:"Builds tension from silence to peak before your first word — creates anticipation.", when:"Listing or Step-by-Step openings. Anywhere you want to signal something important is coming.", vibe:"Hype · Anticipation" },
+  { id:"ah2",  name:"Woosh / Swipe",  emoji:"💨", desc:"A fast air movement sound on screen transitions or cuts between points.", when:"Between numbered list items. When switching from hook to main content.", vibe:"Energetic · Clean" },
+  { id:"ah3",  name:"Pop",            emoji:"🫧", desc:"A short sharp single pop. Punctuates a bold statement or emphasises a word on screen.", when:"When a stat appears. When text hits the screen. End of a punchline.", vibe:"Playful · Sharp" },
+  { id:"ah4",  name:"Ding / Chime",   emoji:"🔔", desc:"A bright positive tone for when something clicks, is confirmed, or a point lands.", when:"'The solution is...' moment. Revealing the answer. A positive insight.", vibe:"Satisfying · Positive" },
+  { id:"ah5",  name:"Whomp / Fail",   emoji:"📉", desc:"A descending sad trombone. Use when describing the problem or mistake.", when:"'Most students do X...' before the correction. Showing what not to do.", vibe:"Comedic · Relatable" },
+  { id:"ah6",  name:"Heartbeat",      emoji:"❤️",  desc:"A slow rhythmic pulse. Creates intimacy and focus — pulls viewer in.", when:"Reflection videos. Opening a personal story. Before a vulnerable moment.", vibe:"Intimate · Focused" },
+  { id:"ah7",  name:"Notification",   emoji:"📳", desc:"Phone ping or alert sound. Triggers a Pavlovian attention reflex — viewer snaps to focus.", when:"Opening of any video. 'You need to hear this.' Grabbing attention instantly.", vibe:"Urgent · Familiar" },
+  { id:"ah8",  name:"Typing",         emoji:"⌨️",  desc:"Keyboard typing sounds. Suggests work, productivity, documentation.", when:"Step-by-Step videos. Showing a Notion setup. Any system or framework reveal.", vibe:"Productive · Credible" },
+  { id:"ah9",  name:"Silence / Drop", emoji:"🔇", desc:"Cutting all sound suddenly. Creates a dramatic pause — viewer's brain expects something.", when:"Before a controversial take. Right before revealing the main point.", vibe:"Dramatic · Powerful" },
+  { id:"ah10", name:"Crowd Cheer",    emoji:"🎉", desc:"Applause or crowd sound. Use sparingly — celebrates a win or achievement.", when:"'After I did X, this happened...' — reveals a positive outcome.", vibe:"Celebratory · Motivating" },
+];
+
+const VISUAL_HOOKS = [
+  { id:"vi1",  type:"Statistic",         emoji:"📊", desc:"A bold number on screen — large text, high contrast.", example:"73% of students say they don't have a revision system. Are you one of them?", when:"Opening 2 seconds. Stops the scroll before you say a word.", tip:"Put the stat on screen as text even while speaking it. Double impact." },
+  { id:"vi2",  type:"Screenshot",        emoji:"📱", desc:"A real screenshot of a message, DM, email, or result.", example:"Screenshot of your placement offer email. A grade going up.", when:"Proof-based openings. 'Someone asked me...' content. Social proof moments.", tip:"Blur out names. The realness of a screenshot builds instant trust." },
+  { id:"vi3",  type:"Before / After",    emoji:"↔️",  desc:"Split screen or sequential reveal showing contrast.", example:"My week before the retrospective timetable vs after.", when:"Any comparison or transformation video. Great for Listing and Step-by-Step.", tip:"Make the 'before' relatable first — the viewer needs to see themselves in it." },
+  { id:"vi4",  type:"Text on Screen",    emoji:"🅰️",  desc:"Your exact spoken words appear as large text while you say them.", example:"'STOP MAKING TO-DO LISTS' appears as you say it.", when:"Every video. This is the baseline — always have key phrases as on-screen text.", tip:"Bold, sans-serif, centred. Resize to emphasise. Don't write full sentences." },
+  { id:"vi5",  type:"Notebook / Notes",  emoji:"📓", desc:"Show your actual handwritten or Notion notes on camera.", example:"Flipping to a page in your notebook that shows your timetable.", when:"Step-by-Step and framework videos. Makes abstract systems feel real.", tip:"Camera over the notebook, not just talking about it. Show the actual thing." },
+  { id:"vi6",  type:"Phone Screen",      emoji:"📲", desc:"Record or screenshare your phone/laptop showing the real tool.", example:"Showing your actual Notion calendar. Showing a real CapCut timeline.", when:"Any system or process video. 'Here's exactly what I use.'", tip:"Screen record + voiceover works well. Feels like you're showing a mate." },
+  { id:"vi7",  type:"Graph / Chart",     emoji:"📉", desc:"A simple hand-drawn or digital chart showing a trend or contrast.", example:"A hand-drawn graph: stress vs productivity over placement year.", when:"Data-backed points. Showing a pattern or trend in your experience.", tip:"Hand-drawn feels more personal than a polished chart. Imperfect is authentic." },
+  { id:"vi8",  type:"Quote Card",        emoji:"💬", desc:"A quote — from you, a book, or someone respected — styled as a visual.", example:"'You don't rise to the level of your goals, you fall to the level of your systems.'", when:"Reflection and mindset videos. As a B-roll insert between talking points.", tip:"Keep it simple. Quote + attribution only. Let it breathe." },
+  { id:"vi9",  type:"Timer / Countdown", emoji:"⏱️",  desc:"A visible timer on screen showing a task being done in real time.", example:"20-minute planning session with a countdown timer visible.", when:"Any 'I do this in X minutes' claim. Proves it's actually quick.", tip:"This is accountability made visual. Shows you're not just talking about it." },
+  { id:"vi10", type:"B-Roll Action",     emoji:"🎬", desc:"You doing the thing — gym, walking, working — over your voiceover.", example:"You studying at a café while you explain your revision method.", when:"Any time you're explaining something you actually do. Low-effort videos.", tip:"Film first, add voiceover later. B-roll hides jump cuts and keeps energy up." },
+];
+
+// ─── HOOK BANK SECTION ────────────────────────────────────────────────────────
+function HookBankSection() {
+  const [tab, setTab]         = useState("verbal");
+  const [copied, setCopied]   = useState(null);
+  const [expAudio, setExpAudio]   = useState(null);
+  const [expVisual, setExpVisual] = useState(null);
+
+  const copy = (id, text) => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopied(id);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
+  const CAT_COLORS = { Curiosity: G.blue, Contrast: G.purple, Direct: G.green, Reflection: G.orange };
+  const verbalCats = [...new Set(VERBAL_HOOKS.map(h => h.cat))];
+
+  return (
+    <div style={{ animation: "fadeUp 0.25s ease" }}>
+      {/* Sub-tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 22, padding: 4, background: G.card, borderRadius: 9, border: `1px solid ${G.border}` }}>
+        {[["verbal","✍️  Verbal"],["audio","🔊  Audio"],["visual","👁  Visual"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 6, border: "none",
+            background: tab === id ? G.cardHigh : "transparent",
+            color: tab === id ? G.text : G.textDim,
+            fontSize: 11, letterSpacing: "0.5px", fontWeight: tab === id ? 600 : 400,
+            transition: "all 0.15s ease",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* VERBAL */}
+      {tab === "verbal" && (
+        <div style={{ animation: "fadeUp 0.2s ease" }}>
+          <div style={{ fontSize: 11, color: G.textDim, marginBottom: 18 }}>Click any template to copy it. Fill in the [brackets].</div>
+          {verbalCats.map(cat => {
+            const color = CAT_COLORS[cat] || G.gold;
+            return (
+              <div key={cat} style={{ marginBottom: 22 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, display: "inline-block" }} />
+                  <span style={{ fontSize: 10, color, letterSpacing: "1.5px", fontWeight: 700 }}>{cat.toUpperCase()}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {VERBAL_HOOKS.filter(h => h.cat === cat).map(h => (
+                    <div key={h.id} className="idea-card" onClick={() => copy(h.id, h.template)} style={{
+                      padding: "11px 14px", background: G.card, borderRadius: 8,
+                      border: `1px solid ${G.border}`, cursor: "pointer",
+                      display: "flex", gap: 10, alignItems: "flex-start",
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: G.text, lineHeight: 1.6, fontWeight: 500, marginBottom: 5 }}>{h.template}</div>
+                        <div style={{ fontSize: 11, color: G.textMid, lineHeight: 1.5, fontStyle: "italic" }}>{h.example}</div>
+                      </div>
+                      <span style={{
+                        flexShrink: 0, fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                        background: copied === h.id ? G.green+"20" : G.cardHigh,
+                        color: copied === h.id ? G.green : G.textDim,
+                        transition: "all 0.15s ease", whiteSpace: "nowrap",
+                      }}>{copied === h.id ? "COPIED ✓" : "COPY"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* AUDIO */}
+      {tab === "audio" && (
+        <div style={{ animation: "fadeUp 0.2s ease" }}>
+          <div style={{ fontSize: 11, color: G.textDim, marginBottom: 18 }}>Find these by name in CapCut's sound effects library. Layer under voice at 10–20% — felt, not heard.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {AUDIO_HOOKS.map(h => {
+              const open = expAudio === h.id;
+              return (
+                <div key={h.id} style={{ background: G.card, borderRadius: 9, border: `1px solid ${G.border}`, overflow: "hidden" }}>
+                  <div onClick={() => setExpAudio(open ? null : h.id)} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 14px", cursor: "pointer",
+                  }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>{h.emoji}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: G.text, fontWeight: 600 }}>{h.name}</div>
+                      <div style={{ fontSize: 10, color: G.textDim, marginTop: 2, letterSpacing: "0.5px" }}>{h.vibe}</div>
+                    </div>
+                    <span style={{ fontSize: 9, color: G.textDim, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
+                  </div>
+                  {open && (
+                    <div style={{ padding: "0 14px 14px", animation: "fadeUp 0.15s ease" }}>
+                      <div style={{ height: 1, background: G.border, marginBottom: 12 }} />
+                      <div style={{ fontSize: 12, color: G.textMid, lineHeight: 1.65, marginBottom: 10 }}>{h.desc}</div>
+                      <div style={{ fontSize: 10, color: G.textDim, letterSpacing: "1px", marginBottom: 5 }}>BEST WHEN</div>
+                      <div style={{ fontSize: 11, color: G.textMid, lineHeight: 1.65, paddingLeft: 10, borderLeft: `2px solid ${G.gold}35` }}>{h.when}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 14, padding: "12px 14px", background: G.blue+"08", border: `1px solid ${G.blue}18`, borderRadius: 8, fontSize: 11, color: G.textDim, lineHeight: 1.7 }}>
+            <span style={{ color: G.blue, fontWeight: 600 }}>In CapCut: </span>
+            Audio → Sound Effects → search the name. Layer it under your voice track at very low volume. You want it felt, not heard.
+          </div>
+        </div>
+      )}
+
+      {/* VISUAL */}
+      {tab === "visual" && (
+        <div style={{ animation: "fadeUp 0.2s ease" }}>
+          <div style={{ fontSize: 11, color: G.textDim, marginBottom: 18 }}>Show don't just tell. Use these to make your point land visually, not just verbally.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {VISUAL_HOOKS.map(h => {
+              const open = expVisual === h.id;
+              return (
+                <div key={h.id} style={{ background: G.card, borderRadius: 9, border: `1px solid ${G.border}`, overflow: "hidden" }}>
+                  <div onClick={() => setExpVisual(open ? null : h.id)} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 14px", cursor: "pointer",
+                  }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>{h.emoji}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: G.text, fontWeight: 600 }}>{h.type}</div>
+                      <div style={{ fontSize: 10, color: G.textDim, marginTop: 2 }}>{h.desc.slice(0, 56)}...</div>
+                    </div>
+                    <span style={{ fontSize: 9, color: G.textDim, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
+                  </div>
+                  {open && (
+                    <div style={{ padding: "0 14px 14px", animation: "fadeUp 0.15s ease" }}>
+                      <div style={{ height: 1, background: G.border, marginBottom: 12 }} />
+                      <div style={{ fontSize: 12, color: G.textMid, lineHeight: 1.65, marginBottom: 10 }}>{h.desc}</div>
+                      <div style={{ padding: "9px 12px", background: G.cardLow, borderRadius: 7, marginBottom: 8, borderLeft: `2px solid ${G.orange}40` }}>
+                        <div style={{ fontSize: 9, color: G.textDim, letterSpacing: "1.5px", marginBottom: 4 }}>EXAMPLE</div>
+                        <div style={{ fontSize: 11, color: G.textMid, lineHeight: 1.5, fontStyle: "italic" }}>{h.example}</div>
+                      </div>
+                      <div style={{ padding: "9px 12px", background: G.cardLow, borderRadius: 7, borderLeft: `2px solid ${G.gold}40` }}>
+                        <div style={{ fontSize: 9, color: G.textDim, letterSpacing: "1.5px", marginBottom: 4 }}>PRO TIP</div>
+                        <div style={{ fontSize: 11, color: G.textMid, lineHeight: 1.5 }}>{h.tip}</div>
+                      </div>
+                      <div style={{ marginTop: 8, fontSize: 10, color: G.textDim }}>{h.when}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── GLOSSARY SECTION ─────────────────────────────────────────────────────────
+const GLOSSARY = [
+  {
+    category: "Video Types",
+    color: "#D4A853",
+    entries: [
+      { term: "TH — Talking Head",    def: "You speaking directly to camera. The most personal format — your face, your voice, your take. Breaks into ToFu TH (≤30s, one sharp point) and MoFu TH (longer, deeper). Soft limit: 3 per week to avoid overexposure." },
+      { term: "STL — Still",          def: "You in your environment, not talking to camera. The visual does the work — you're in your world. Message is carried by voiceover or text overlay. Lets the scene breathe and builds lifestyle credibility." },
+      { term: "SDT — Show Don't Tell",def: "You doing the thing on camera. One practical step, camera on the action not your face. Formula: 'If you're trying to [X] — here's how I do it.' You're not teaching. You're showing. Invite them in, don't instruct." },
+      { term: "TE — Text / Edit",     def: "No filming required. Designed entirely in CapCut or Canva. One truth, one statement, bold text. Makes the right person stop scrolling. Zero production friction — your most 'anytime' format." },
+    ]
+  },
+  {
+    category: "Funnel Levels",
+    color: "#E8906A",
+    entries: [
+      { term: "ToFu — Top of Funnel", def: "Content that speaks to strangers. Emotional entry point — validates a feeling before it teaches anything. Designed to pull in people who don't know you yet. The hook is everything. Short, punchy, feeling-first." },
+      { term: "MoFu — Mid Funnel",    def: "Content that rewards people already in your world. Goes deeper — frameworks, systems, personal reflection. Builds trust and authority with people who already follow you. Can be longer and more structured." },
+    ]
+  },
+  {
+    category: "Intent",
+    color: "#6DC8E8",
+    entries: [
+      { term: "Teach",     def: "You're transferring knowledge or a framework. They leave knowing something they didn't before. Step-by-step, listing, comparison formats tend to live here. The value is in the information." },
+      { term: "Share",     def: "A window into your life, thinking or experience. No lesson required — connection over information. 'This is where I am right now.' Journey content, reflection, honest moments." },
+      { term: "Reinforce", def: "A different angle on a belief you've already planted in your audience. Not repeating yourself — deepening something that's already in their head. You've said it; now you're making it stick." },
+      { term: "Question",  def: "You're challenging an assumption. Not giving them the answer — making them uncomfortable with the one they already have. Contrarian content. Forces self-reflection." },
+      { term: "Inspire",   def: "Not how — why they could. Forward-facing. You're not teaching the method, you're making someone believe the outcome is possible for them. Emotionally driven, possibility-first." },
+      { term: "Validate",  def: "Naming a feeling your viewer has but hasn't been able to articulate. 'You feel this way and that's not weakness.' The focus is entirely on them feeling seen — before you say anything else." },
+    ]
+  },
+  {
+    category: "Framework Phases",
+    color: "#6ED9A0",
+    entries: [
+      { term: "Hook",       def: "The first 1–3 seconds. Accounts for 80% of a video's effectiveness. Plants tension — a question, a contradiction, a feeling. If they don't stay through the hook, nothing else matters. Film this last, think about it first." },
+      { term: "Bridge",     def: "Opens the loop the hook created. Sets up the context — puts the viewer inside the belief or situation being challenged. Tight: 2–3 seconds max in a reel. Its job is to make the body necessary." },
+      { term: "Body",       def: "One idea. Not three. The single thing you came to say. Lived experience as proof — not credentials, not theory. Frame it as an observation: 'I noticed...' not 'I know...'" },
+      { term: "Conviction", def: "What they carry away. The emotion or belief they leave with — not just the information. Ask: what do I want them to feel in the 30 seconds after watching? That's your conviction." },
+      { term: "CTA",        def: "One action. Never two. 'Save this' or 'what do you think?' — not both. The weakest CTAs are generic. The strongest ones feel like a natural continuation of the conviction." },
+    ]
+  },
+  {
+    category: "Hook Types",
+    color: "#B87EE8",
+    entries: [
+      { term: "Bold Statement",    def: "Say the take directly. No build-up. Full stop. Works because it forces the viewer to either agree or push back — both keep them watching." },
+      { term: "Statistic",         def: "A real number on screen before you say anything. Grounds the viewer in reality before the reframe. Credibility + intrigue." },
+      { term: "Reflect It Back",   def: "Name the feeling they haven't been able to name. Deep recognition — they feel understood before you say a word. Highest emotional entry." },
+      { term: "Curiosity Gap",     def: "Open a loop. Don't close it until the end. The brain has to stay to resolve the tension. Use sparingly — it loses power if overused." },
+      { term: "Contrarian Opener", def: "Say something that seems wrong. Make them lean in. Cognitive dissonance — they have to hear your argument to decide if you're right." },
+      { term: "Story Drop",        def: "Start mid-scene. No context. Drop them in. Empathy and relatability — pulls them into your experience before they have time to decide if they care." },
+      { term: "Direct Question",   def: "Ask them something they've been avoiding. They pause because the question hits. Self-reflection is the hook." },
+      { term: "Pattern Interrupt", def: "Break their autopilot before they realise it. Disrupts the scroll reflex — snaps them into attention before their thumb catches up." },
+    ]
+  },
+  {
+    category: "Production Terms",
+    color: "#A89880",
+    entries: [
+      { term: "VO — Voiceover",      def: "Your voice recorded separately from the video footage. You film the scene or B-roll first, then record your voice over the top in edit. No synced audio on set. Useful for STL and SDT formats." },
+      { term: "B-Roll",              def: "Supplementary footage that plays over your voiceover or main content. You studying, walking, cooking, at the gym. Hides jump cuts, adds visual variety, and makes abstract ideas feel concrete." },
+      { term: "Jump Cut",            def: "Cutting from one shot to the same shot at a different point — removes dead space or pauses. Standard in talking head editing. Use B-roll to hide them if they feel jarring." },
+      { term: "Talking Head",        def: "Footage where you're speaking directly to camera. See TH above. The most common format for educational and personal content creators." },
+      { term: "CapCut",              def: "Your primary edit tool. Used for auto-captions, text overlays (Bebas Neue), sound effects, transitions, and B-roll sequencing. Export at 1080x1920 for Reels." },
+      { term: "Bebas Neue",          def: "Your on-screen text font. Bold, condensed, punchy. Used for key phrases appearing over footage. Not for full sentences — for words and short phrases only." },
+      { term: "Auto-Captions",       def: "Subtitles generated automatically from your audio. Essential for all talking head content — most people watch with sound off. Clean up errors before exporting." },
+      { term: "Series",              def: "A named thread of content that belongs together over time. Journey content, ongoing topics, recurring formats. Labels ideas as part of an arc rather than standalone posts." },
+    ]
+  },
+];
+
+function GlossarySection() {
+  const [search, setSearch] = useState("");
+  const [openCat, setOpenCat] = useState(null);
+
+  const q = search.toLowerCase();
+  const filtered = GLOSSARY.map(cat => ({
+    ...cat,
+    entries: cat.entries.filter(e =>
+      !q || e.term.toLowerCase().includes(q) || e.def.toLowerCase().includes(q)
+    )
+  })).filter(cat => cat.entries.length > 0);
+
+  return (
+    <div style={{ animation: "fadeUp 0.25s ease", maxWidth: 680 }}>
+      <div style={{ fontSize: 13, color: G.textDim, marginBottom: 20, lineHeight: 1.7 }}>
+        Every term used in this OS — defined clearly. Use this when something needs clarifying or when onboarding your thinking to a new format.
+      </div>
+
+      {/* Search */}
+      <input value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="Search any term..."
+        style={{ width: "100%", padding: "10px 14px", background: G.card, border: `1px solid ${G.border}`, borderRadius: 9, color: G.text, fontSize: 13, marginBottom: 24 }} />
+
+      {/* Categories */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {filtered.map(cat => {
+          const isOpen = search || openCat === cat.category;
+          return (
+            <div key={cat.category} style={{ borderRadius: 10, border: `1px solid ${isOpen ? cat.color+"35" : G.border}`, overflow: "hidden", transition: "border-color 0.2s ease" }}>
+              {/* Category header */}
+              <div onClick={() => setOpenCat(isOpen && !search ? null : cat.category)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", cursor: "pointer", background: isOpen ? cat.color+"08" : G.card, transition: "background 0.2s ease" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color, flexShrink: 0 }} />
+                <span style={{ fontFamily: "'Fraunces',serif", fontSize: 16, fontWeight: 700, color: isOpen ? cat.color : G.text, flex: 1, transition: "color 0.2s ease" }}>{cat.category}</span>
+                <span style={{ fontSize: 10, color: G.textDim }}>{cat.entries.length} term{cat.entries.length !== 1 ? "s" : ""}</span>
+                {!search && <span style={{ fontSize: 10, color: G.textDim, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>}
+              </div>
+
+              {/* Entries */}
+              {isOpen && (
+                <div style={{ borderTop: `1px solid ${G.border}` }}>
+                  {cat.entries.map((e, idx) => (
+                    <div key={e.term} style={{
+                      padding: "14px 18px",
+                      borderBottom: idx < cat.entries.length - 1 ? `1px solid ${G.border}` : "none",
+                      background: G.cardLow,
+                    }}>
+                      <div style={{ fontSize: 13, color: cat.color, fontWeight: 700, marginBottom: 5 }}>{e.term}</div>
+                      <div style={{ fontSize: 12, color: G.textMid, lineHeight: 1.75 }}>{e.def}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── NAV ──────────────────────────────────────────────────────────────────────
+const NAV = [
+  { id:"bank",     label:"Idea Bank",  icon:"✦" },
+  { id:"calendar", label:"Calendar",   icon:"⬡" },
+  { id:"hooks",    label:"Hook Bank",  icon:"◇" },
+  { id:"glossary", label:"Glossary",   icon:"◎" },
+];
+
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage]   = useState("bank");
+  const [ideas, setIdeas] = useState(() => load());
+
+  // Persist on every change
+  useEffect(() => { save(ideas); }, [ideas]);
+
+  return (
+    <>
+      <style>{css}</style>
+      <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+
+        {/* SIDEBAR */}
+        <div style={{ width: 200, flexShrink: 0, background: G.surface, borderRight: `1px solid ${G.border}`, display: "flex", flexDirection: "column" }}>
+          {/* Brand */}
+          <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${G.border}` }}>
+            <div style={{ fontSize: 10, color: G.gold, fontWeight: 700, letterSpacing: "1.5px", marginBottom: 4 }}>MOTHEO</div>
+            <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22, fontWeight: 700, color: G.text, lineHeight: 1.1 }}>Content<br/>OS</div>
+            <div style={{ marginTop: 10, padding: "4px 10px", background: G.gold+"18", border: `1px solid ${G.gold}30`, borderRadius: 6, display: "inline-block" }}>
+              <span style={{ fontSize: 10, color: G.gold, fontWeight: 600 }}>Today — Fri 6 Mar</span>
+            </div>
+          </div>
+
+          {/* Nav */}
+          <nav style={{ flex: 1, padding: "12px 0" }}>
+            {NAV.map(item => (
+              <button key={item.id} className={`nav-btn ${page === item.id ? "active" : ""}`} onClick={() => setPage(item.id)} style={{
+                width: "100%", padding: "11px 20px",
+                background: page === item.id ? G.gold+"14" : "transparent",
+                border: "none", borderLeft: `3px solid ${page === item.id ? G.gold : "transparent"}`,
+                color: page === item.id ? G.gold : G.textMid,
+                fontSize: 13, fontWeight: page === item.id ? 600 : 400,
+                textAlign: "left", display: "flex", gap: 10, alignItems: "center",
+                transition: "all 0.15s ease",
+              }}>
+                <span style={{ fontSize: 14 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Stats summary */}
+          <div style={{ padding: "14px 20px", borderTop: `1px solid ${G.border}` }}>
+            <div style={{ fontSize: 10, color: G.textDim, fontWeight: 600, marginBottom: 8, letterSpacing: "0.5px" }}>BANK</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {[
+                ["Total ideas", ideas.length, G.textMid],
+                ["Ready", ideas.filter(i=>i.status==="ready").length, G.gold],
+                ["Assigned", ideas.filter(i=>i.status==="assigned").length, G.purple],
+                ["Posted", ideas.filter(i=>i.status==="posted").length, G.green],
+              ].map(([l,n,c]) => (
+                <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                  <span style={{ color: G.textDim }}>{l}</span>
+                  <span style={{ color: c, fontWeight: 600 }}>{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: "12px 20px", borderTop: `1px solid ${G.border}` }}>
+            <div style={{ fontSize: 10, color: G.textDim, lineHeight: 2 }}>
+              <span style={{ color: G.gold, fontWeight: 600 }}>Friday</span> = batch.<br/>
+              <span style={{ color: G.textMid }}>Mon–Thu</span> = post.
+            </div>
+          </div>
+        </div>
+
+        {/* MAIN */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Page header */}
+          <div style={{ padding: "24px 32px 20px", borderBottom: `1px solid ${G.border}`, flexShrink: 0 }}>
+            <div style={{ fontFamily: "'Fraunces',serif", fontSize: 26, fontWeight: 700, color: G.text }}>
+              {NAV.find(n => n.id === page)?.label}
+            </div>
+            <div style={{ height: 2, marginTop: 10, background: `linear-gradient(90deg,${G.gold}40,${G.border},transparent)`, borderRadius: 1 }} />
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px" }}>
+            {page === "bank"     && <IdeaBankSection ideas={ideas} setIdeas={setIdeas} />}
+            {page === "calendar" && <CalendarSection ideas={ideas} setIdeas={setIdeas} />}
+            {page === "hooks"    && <HookBankSection />}
+            {page === "glossary" && <GlossarySection />}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
