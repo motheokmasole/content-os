@@ -1152,7 +1152,7 @@ function App() {
             <div style={{ fontSize: 10, color: G.gold, fontWeight: 700, letterSpacing: "1.5px", marginBottom: 4 }}>MOTHEO</div>
             <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22, fontWeight: 700, color: G.text, lineHeight: 1.1 }}>Content<br/>OS</div>
             <div style={{ marginTop: 10, padding: "4px 10px", background: G.gold+"18", border: `1px solid ${G.gold}30`, borderRadius: 6, display: "inline-block" }}>
-              <span style={{ fontSize: 10, color: G.gold, fontWeight: 600 }}>Today — Fri 6 Mar</span>
+              <span style={{ fontSize: 10, color: G.gold, fontWeight: 600 }}>Today — {new Date().toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" })}</span>
             </div>
           </div>
 
